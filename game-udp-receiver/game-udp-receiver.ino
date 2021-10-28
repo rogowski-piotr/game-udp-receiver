@@ -2,27 +2,33 @@
 #include <WiFiUdp.h>
 #include <string.h>
 
-unsigned const int localPort = 5606;        // define UDP PORT
+unsigned const int localPort = 20777;       // define UDP PORT
 const char ssid[] = "ssid";
-const char pass[] = "password";
-char packetBuffer[1343];              // buffer to hold incoming packet
+const char password[] = "password";
+char packetBuffer[2000];                    // buffer to hold incoming packet
 WiFiUDP Udp;
 
 
-int vRpm, vGear, vSpeed, vTemp = 0, vAbs = 0, vFuel = 0, vEngineState = 0, vLevel = 0, vTime = 0, vSplit = 0;
-int LEDSTATE = 0;
-char incomingByte = 0;
-char data[50];
-String sSpeed;
-String sRpm;
-int counter = 0;
-int button = 1;
-int state = 0;
-String ver = "1.3.2";
-String module = "1";
+#pragma pack(1)
+typedef struct _PacketHeader
+{
+    uint16_t    m_packetFormat;             // 2021
+    uint8_t     m_gameMajorVersion;         // Game major version - "X.00"
+    uint8_t     m_gameMinorVersion;         // Game minor version - "1.XX"
+    uint8_t     m_packetVersion;            // Version of this packet type, all start from 1
+    uint8_t     m_packetId;                 // Identifier for the packet type, see below
+    uint64_t    m_sessionUID;               // Unique identifier for the session
+    float       m_sessionTime;              // Session timestamp
+    uint32_t    m_frameIdentifier;          // Identifier for the frame the data was retrieved on
+    uint8_t     m_playerCarIndex;           // Index of player's car in the array
+    uint8_t     m_secondaryPlayerCarIndex;  // Index of secondary player's car in the array (splitscreen)
+                                            // 255 if no second player
+} PacketHeader, *P_PacketHeader, *LP_PacketHeader;
+#pragma pack()
 
 
-void setup() {                        // setup -> connect to WiFi and start listening udp port
+
+void setup() {                              // setup -> connect to WiFi and start listening udp port
   Serial.begin(9600);
   while (!Serial) ;
   
@@ -40,9 +46,29 @@ void setup() {                        // setup -> connect to WiFi and start list
   Udp.begin(localPort);
 }
 
+/* DEBUG ONLY METHOD */
+void print_uint64_t(uint64_t num) {
+  char rev[128]; 
+  char *p = rev+1;
+  while (num > 0) {
+    *p++ = '0' + ( num % 10);
+    num/= 10;
+  }
+  p--;
+  while (p > rev) {
+    Serial.print(*p--);
+  }
+}
+
 void loop() {
-  int packetSize = Udp.parsePacket();             // if recived any data then read a packet
+  
+  int packetSize = Udp.parsePacket();
+  Serial.println(packetSize);
+  
   if (packetSize) {
+    
+    Udp.read(packetBuffer, packetSize);
+
     Serial.print("Received packet of size ");
     Serial.println(packetSize);
     Serial.print("From ");
@@ -51,67 +77,18 @@ void loop() {
     Serial.print(", port ");
     Serial.println(Udp.remotePort());
 
-    int len = Udp.read(packetBuffer, 1343);       // read the packet into packetBufffer
-    if (len > 0) packetBuffer[len] = 0;
-    Serial.println("Contents:");
-    Serial.println(packetBuffer);
     
-    String stringOne = packetBuffer;
+    LP_PacketHeader pack = (LP_PacketHeader)&packetBuffer;
     
-    if (stringOne.substring(0, 2) == "CC") {
-        sRpm = stringOne.substring(2, 6);
-        vRpm = sRpm.toInt();
-
-        //here the right display for RPM,LAP,Water and Oil temp,position
-
-    } else if (stringOne.substring(0, 3) == "VER") {
-        //to version check
-        Serial.println(ver + ";" + module + ";");
-
-    } else if (stringOne.substring(0, 5) == "state") {
-        //button state
-        state = stringOne.substring(5, 6).toInt();
-
-      if (state == 1) {
-          String button_s = String(button);
-          Serial.println(button_s + ":0:0:");
-      }
-    } else if (stringOne.substring(0, 2) == "DD") {
-        sSpeed = stringOne.substring(2, 6);
-        vSpeed = sSpeed.toInt();
-    }
-    else if (stringOne.substring(0, 2) == "BB") {
-        vGear = stringOne.substring(2).toInt();
-    }
-    else if (stringOne.substring(0, 2) == "CH") {
-        vLevel = stringOne.substring(2).toInt();
-    }
-    else if (stringOne.substring(0, 2) == "CA") {
-        vTime = stringOne.substring(2).toInt();
-    }
-    else if (stringOne.substring(0, 2) == "CE") {
-        vSplit = stringOne.substring(2).toInt();
-    }
-    else if (stringOne.substring(0, 2) == "AA") {
-        vTemp = stringOne.substring(2, 3).toInt(); //0 or 1 , 0 is off and 1 is on
-        vAbs = stringOne.substring(3, 4).toInt(); //0 or 1
-        vEngineState = stringOne.substring(4, 5).toInt(); //0 or 1
-        vFuel = stringOne.substring(5, 6).toInt(); //0 or 1
-        LEDSTATE = stringOne.substring(6, 7).toInt(); //0 - 8
-   }
-
-   Serial.print("stringOne = ");    Serial.println(stringOne);
-   Serial.println("converted values:");
-   Serial.print("vRpm = ");         Serial.println(vRpm);
-   Serial.print("vGear = ");        Serial.println(vGear);
-   Serial.print("vSpeed = ");       Serial.println(vSpeed);
-   Serial.print("vTemp = ");        Serial.println(vTemp);
-   Serial.print("vAbs = ");         Serial.println(vAbs);
-   Serial.print("vFuel = ");        Serial.println(vFuel);
-   Serial.print("vEngineState = "); Serial.println(vEngineState);
-   Serial.print("vLevel = ");       Serial.println(vLevel);
-   Serial.print("vTime = ");        Serial.println(vTime);
-   Serial.print("vSplit = ");       Serial.println(vSplit);
-   Serial.print("LEDSTATE = ");     Serial.println(LEDSTATE);
+    Serial.println(pack->m_packetFormat);
+    Serial.println(pack->m_gameMajorVersion);
+    Serial.println(pack->m_gameMinorVersion);
+    Serial.println(pack->m_packetId);
+    print_uint64_t(pack->m_sessionUID);
+    Serial.println(pack->m_sessionTime);
+    Serial.println(pack->m_frameIdentifier);
+    Serial.println(pack->m_playerCarIndex);
+    Serial.println(pack->m_secondaryPlayerCarIndex);
+    Serial.println("\n");
   }
 }
