@@ -1,9 +1,9 @@
 stream_source:
-  format: 2020
+  format: 2021
   socket:
     ip: ''
-    port: 44444
+    port: 20777
 
 reciver:
-  buffer_size: 4096
+  buffer_size: 8192
   broadcast: True

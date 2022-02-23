@@ -13,5 +13,4 @@ class DatagramReciver():
     def run(self, observer, scheduler):
         while True:
             data, address = self.socket_udp.recvfrom(self.buffer_size)
-            observer.on_next(data.decode('utf-8'))
-            print(f'Server recived from: {address}, {data.decode("utf-8")}')
+            observer.on_next(data)
